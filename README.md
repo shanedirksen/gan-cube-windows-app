@@ -2,7 +2,7 @@
 
 A native Windows desktop application for connecting to and interacting with GAN Smart Cubes via Bluetooth. This app provides real-time cube state monitoring, move tracking, and 3D visualization.
 
-**Based on**: This project ports [afedotov's gan-web-bluetooth library](https://github.com/afedotov/gan-web-bluetooth) and [gan-cube-sample web app](https://github.com/afedotov/gan-cube-sample) to a native Windows desktop application using Tauri.
+**Based on**: This project ports the [gan-web-bluetooth library](https://github.com/afedotov/gan-web-bluetooth) and [gan-cube-sample web app](https://github.com/afedotov/gan-cube-sample) to a native Windows desktop application using Tauri.
 
 ## Features
 
@@ -41,7 +41,7 @@ A native Windows desktop application for connecting to and interacting with GAN 
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/[username]/gan-cube-windows-app.git
+   git clone https://github.com/shanedirksen/gan-cube-windows-app.git
    cd gan-cube-windows-app
    ```
 
@@ -135,7 +135,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- **[afedotov](https://github.com/afedotov)** for the original GAN Bluetooth implementations:
+- **Original web implementations** that made this project possible:
   - [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth) - Core Bluetooth protocol library
   - [gan-cube-sample](https://github.com/afedotov/gan-cube-sample) - Reference web implementation
 - **GAN Robotics** for creating the smart cube technology
