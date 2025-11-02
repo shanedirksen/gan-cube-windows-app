@@ -4,6 +4,7 @@ import $ from 'jquery';
 import { Subscription, interval } from 'rxjs';
 import { TwistyPlayer } from 'cubing/twisty';
 import { experimentalSolve3x3x3IgnoringCenters } from 'cubing/search';
+import { invoke } from '@tauri-apps/api/core';
 
 import * as THREE from 'three';
 
@@ -20,6 +21,16 @@ import {
 } from './lib';
 
 import { faceletsToPattern, patternToFacelets } from './utils';
+
+// Define the structure of scanned devices returned from Rust
+interface ScannedDevice {
+  name: string | null;
+  address: string;
+  signal_strength: number | null;
+}
+
+// Store the selected device globally
+let selectedDevice: ScannedDevice | null = null;
 
 const SOLVED_STATE = "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB";
 
@@ -56,7 +67,7 @@ async function amimateCubeOrientation() {
     twistyVantage = [...vantageList][0];
     twistyScene = await twistyVantage.scene.scene();
   }
-  twistyScene.quaternion.slerp(cubeQuaternion, 0.25);
+  twistyScene.quaternion.slerp(cubeQuaternion, 0.5);
   twistyVantage.render();
   requestAnimationFrame(amimateCubeOrientation);
 }
@@ -142,6 +153,12 @@ function handleCubeEvent(event: GanCubeEvent) {
 }
 
 const customMacAddressProvider: MacAddressProvider = async (device, isFallbackCall): Promise<string | null> => {
+  // If we have a selected device from scanning, use its MAC address
+  if (selectedDevice) {
+    console.log('Using scanned device MAC:', selectedDevice.address);
+    return selectedDevice.address;
+  }
+  
   if (isFallbackCall) {
     return prompt('Unable do determine cube MAC address!\nPlease enter MAC address manually:');
   } else {
@@ -160,24 +177,98 @@ $('#reset-gyro').on('click', async () => {
   basis = null;
 });
 
-$('#connect').on('click', async () => {
+// Scan for cubes using Rust btleplug
+$('#scan').on('click', async () => {
+  try {
+    console.log('Starting cube scan...');
+    $('#scan').html('Scanning...').prop('disabled', true);
+    
+    const devices: ScannedDevice[] = await invoke('scan_for_cubes');
+    console.log('Scan results:', devices);
+    
+    if (devices.length === 0) {
+      alert('No GAN cubes found. Make sure your cube is turned on and nearby.');
+      $('#scan').html('Scan for Cubes').prop('disabled', false);
+      return;
+    }
+    
+    // Show device selection
+    const deviceList = $('#device-list');
+    deviceList.empty();
+    
+    devices.forEach(device => {
+      const deviceButton = $(`
+        <div class="device-option">
+          <button class="device-button" data-address="${device.address}">
+            <div class="device-name">${device.name || 'Unknown GAN Cube'}</div>
+            <div class="device-address">${device.address}</div>
+            <div class="device-signal">Signal: ${device.signal_strength || 'Unknown'} dBm</div>
+          </button>
+        </div>
+      `);
+      
+      deviceButton.find('.device-button').on('click', async () => {
+        selectedDevice = device;
+        $('.device-button').removeClass('selected');
+        deviceButton.find('.device-button').addClass('selected');
+        console.log('Selected device:', device);
+        
+        // Automatically trigger connection when device is clicked
+        try {
+          deviceButton.find('.device-button').html('<div class="device-name">Connecting...</div>');
+          
+          if (conn) {
+            conn.disconnect();
+            conn = null;
+          }
+          
+          conn = await connectGanCube(customMacAddressProvider);
+          conn.events$.subscribe(handleCubeEvent);
+          await conn.sendCubeCommand({ type: "REQUEST_HARDWARE" });
+          await conn.sendCubeCommand({ type: "REQUEST_FACELETS" });
+          await conn.sendCubeCommand({ type: "REQUEST_BATTERY" });
+          $('#deviceName').val(conn.deviceName);
+          $('#deviceMAC').val(conn.deviceMAC);
+          $('#disconnect').show();
+          $('#scan').hide();
+          
+          // Hide device selection after successful connection
+          $('#device-selection').hide();
+          
+          console.log('Connected successfully!');
+        } catch (error) {
+          console.error('Failed to connect to cube:', error);
+          alert('Failed to connect to cube. Make sure your cube is nearby and try again.');
+          deviceButton.find('.device-button').html(`
+            <div class="device-name">${device.name || 'Unknown GAN Cube'}</div>
+            <div class="device-address">${device.address}</div>
+            <div class="device-signal">Signal: ${device.signal_strength || 'Unknown'} dBm</div>
+          `);
+        }
+      });
+      
+      deviceList.append(deviceButton);
+    });
+    
+    $('#device-selection').show();
+    $('#scan').html('Scan for Cubes').prop('disabled', false);
+    
+  } catch (error) {
+    console.error('Scan failed:', error);
+    alert('Failed to scan for cubes: ' + error);
+    $('#scan').html('Scan for Cubes').prop('disabled', false);
+  }
+});
+
+$('#disconnect').on('click', async () => {
   if (conn) {
     conn.disconnect();
     conn = null;
-  } else {
-    try {
-      conn = await connectGanCube(customMacAddressProvider);
-      conn.events$.subscribe(handleCubeEvent);
-      await conn.sendCubeCommand({ type: "REQUEST_HARDWARE" });
-      await conn.sendCubeCommand({ type: "REQUEST_FACELETS" });
-      await conn.sendCubeCommand({ type: "REQUEST_BATTERY" });
-      $('#deviceName').val(conn.deviceName);
-      $('#deviceMAC').val(conn.deviceMAC);
-      $('#connect').html('Disconnect');
-    } catch (error) {
-      console.error('Failed to connect to cube:', error);
-      alert('Failed to connect to cube. Make sure your cube is nearby and try again.');
-    }
+    selectedDevice = null;
+    $('.info input').val('- n/a -');
+    $('#disconnect').hide();
+    $('#scan').show();
+    console.log('Disconnected from cube');
   }
 });
 
